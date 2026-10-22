@@ -6,6 +6,9 @@ They're connected via a simple 3 wire interface:
 
 ![Beast sync cable](images/wire.png)
 
+In a pinch you could probably forego the resistors and just use 3 wires, and it should
+still work.
+
 ## Build it 
 
 You need [sjasmplus](). Edit the `Makefile` to point to it then type: 
@@ -30,14 +33,16 @@ SYNC <flags> <prog>[.ext] [args...]
 Where:
 
 flags (any order, any case, other letters ignored):
-  - **M**  MicroBeast  - Z84C20 PIO, port A data 0x10 / control 0x12
-  - **N**  NanoBeast   - CPLD, port A data 0x10 / direction 0x11 (always bit mode)
-  - **L**  leader      - sends the heartbeat and the START pulse
-  - **F**  follower    - echoes RX to TX, fires on the falling edge of START
+  - **M**  MicroBeast (Z84C20 PIO)
+  - **N**  NanoBeast (CPLD-based PIO)
+  - **L**  leader (sends the heartbeat and the START pulse)
+  - **F**  follower (monitors heartbeat and START pulse)
 
 **\<prog\>** defaults to .COM. Everything after it becomes the program's
-command thanail at 0x0080, and the first two words are parsed into the
-default FCBs at 0x005C/0x006C, just as the CCP would have done.
+command tail at 0x0080, and the first two words are parsed into the
+default FCBs at 0x005C/0x006C, just as the CCP would have done. (In fact
+this is the bulk of the code below, the actual syncing is pretty trivial!)
+
 
 Once you've run that on one machine, run the equivalent command on the other 
 machine. One machine must be "leader" and the other must be "follower".
@@ -58,7 +63,7 @@ left for `sync.com`, in which case it will print an error and bail.
 On machine A, a MicroBeast:
 
 ```
-sync ML phaserf.com
+sync ML phaserf
 ```
 
 The MicroBeast is the leader, it will wait for another machine to sync.
@@ -66,7 +71,7 @@ The MicroBeast is the leader, it will wait for another machine to sync.
 On Machine B, a NanoBeast:
 
 ```
-sync NF phaserf.com
+sync NF phaserf
 ```
 
 The NanoBeast is the follower. It will sync with the master, then both 
@@ -75,3 +80,16 @@ latency between the two should be +/- 20 T-states, or about 2us.
 
 It doesn't matter which one starts first: you can start the follower after 
 the leader, if you like.
+
+## How it works 
+
+The "leader" sends out a square wave on PA0 at a particular period, and listens for 
+it coming back on PA1, with the same period. Once it receives 8 such confirmations, 
+it sends a longer START pulse, and then jumps to the start of the wrapped program \<prog\>.
+
+The "follower" just copies any activity it sees on PA1 to PA0. It measures how long the 
+pulses are though, and as soon as it sees one that looks like a START pulse it starts 
+its own wrapped \<prog\>.
+
+It's a bit like a spectrum tape loading pilot tone, but with another computer instead
+of a cassette recorder (and there's no subsequent data transfer).
