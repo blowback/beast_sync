@@ -21,11 +21,13 @@
 ;   2. Copy the resident stub to the top of the TPA (just under BDOS, on a
 ;      page boundary) and fix it up from the sjasmplus HIGH relocation table.
 ;   3. The stub loads <prog> at 0x0100, over the top of SYNC itself.
-;   4. Follower: mirror RX onto TX. If RX stays high for longer than any
-;      heartbeat can (ARM_US), that's START: DI, wait for the falling edge,
-;      go.
-;      Leader: raise TX, wait for the echo, hold HB_US, drop TX, wait for
-;      the echo, hold HB_US. Any miss restarts the count. After BEATS good
+;   4. Follower: drive TX to the INVERSE of RX. An inverted echo can't be
+;      faked by a dead line (stuck low or high) or by the leader's own TX
+;      coupling into a floating RX pin, both of which follow in phase.
+;      If RX stays high for longer than any heartbeat can (ARM_US), that's
+;      START: DI, wait for the falling edge, go.
+;      Leader: raise TX, wait for RX low, hold HB_US, drop TX, wait for
+;      RX high, hold HB_US. Any miss restarts the count. After BEATS good
 ;      round trips: DI, hold TX high for START_US, drop it, go.
 ;   5. Go: SP=(0x0006), push 0 so RET warm boots, restore the interrupt
 ;      state SYNC was started with, JP 0x0100.
@@ -506,7 +508,7 @@ s_follower:
 .loop:  IN      A, (PIO_DATA)           ; 11
         AND     RX_MASK                 ;  7
         JR      Z, .low                 ;  7
-        LD      A, TX_MASK              ;  7
+        LD      A, 0                    ;  7  RX high -> TX low (LD, not XOR: keeps 7T)
         OUT     (PIO_DATA), A           ; 11
         INC     HL                      ;  6
         LD      A, H                    ;  4
@@ -529,10 +531,9 @@ s_follower:
         OUT     (PIO_DATA), A
         JP      s_go
 
-.low:   XOR     A
+.low:   LD      A, TX_MASK          ; RX low -> TX high
         OUT     (PIO_DATA), A
-        LD      H, A
-        LD      L, A
+        LD      HL, 0
         INC     DE
         LD      A, D
         OR      E
@@ -546,14 +547,15 @@ s_leader:
         LD      B, BEATS
 .beat:  LD      A, TX_MASK
         OUT     (PIO_DATA), A
-        LD      A, RX_MASK
-        CALL    s_wait_rx               ; echo high?
+        XOR     A
+        CALL    s_wait_rx               ; TX high: inverted echo should go low
         JR      C, .miss
         LD      HL, HB_CNT
         CALL    s_delay
         XOR     A
         OUT     (PIO_DATA), A
-        CALL    s_wait_rx               ; A=0: echo low?
+        LD      A, RX_MASK
+        CALL    s_wait_rx               ; TX low: inverted echo should go high
         JR      C, .miss
         LD      HL, HB_CNT
         CALL    s_delay
