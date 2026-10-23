@@ -9,7 +9,17 @@ They're connected via a simple 3 wire interface:
 In a pinch you could probably forego the resistors and just use 3 wires, and it should
 still work.
 
+
 ## Build it 
+
+### Hardware 
+
+![BeastSync dongle](images/board.jpg)
+
+The BeastSync dongle is trivially easy to build! A couple of 1k current limiting resistors,
+and two weak 10k pull-downs, and some connectors.
+
+### Software
 
 You need [sjasmplus](). Edit the `Makefile` to point to it then type: 
 
@@ -82,6 +92,8 @@ It doesn't matter which one starts first: you can start the follower after
 the leader, if you like.
 
 ## How it works 
+
+![BeastSync scope trace](images/scope.jpg)
 
 The "leader" sends out a square wave on PA0 at a particular period, and listens for 
 it coming back on PA1, with the same period. Once it receives 8 such confirmations, 
