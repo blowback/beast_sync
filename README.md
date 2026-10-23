@@ -1,4 +1,4 @@
-# Beast sync
+# SynchroBeast
 
 Synchronise the start of two programs running on two different {Micro/Nano}Beasts.
 
